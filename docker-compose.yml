@@ -1,0 +1,61 @@
+services:
+  db:
+    container_name: postgres_db
+    image: postgres:13
+    hostname: postgres
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    networks:
+      - odoo-net
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4:6.8
+    hostname: pgadmin
+    restart: always
+    user: "0:0"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin_config:/var/lib/pgadmin/storage/admin_admin.com
+    networks:
+      - odoo-net
+    depends_on:
+      - db
+
+  odoo:
+    container_name: odoo18
+    image: odoo:18
+    hostname: odoo
+    user: "1000:1000"  # Utilisateur Odoo standard
+    depends_on:
+      - db
+    restart: always
+    ports:
+      - "8069:8069"
+    env_file:
+      - .env
+    environment:
+      - HOST=db
+      - USER=odoo
+      - PASSWORD=odoo123
+      - SESSION_DIR=/tmp/sessions  # Dossier sessions alternatif
+    volumes:
+      - ./odoo_data:/var/lib/odoo
+      - ./odoo_addons:/mnt/extra-addons
+      - ./odoo_sessions:/tmp/sessions  # Volume pour les sessions
+    networks:
+      - odoo-net
+
+networks:
+  odoo-net:
+
+volumes:
+  pgadmin_data:

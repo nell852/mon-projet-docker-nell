@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo123
+    volumes:
+      - pg_data_swarm:/var/lib/postgresql/data
+    networks:
+      - odoo-net
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+  pgadmin:
+    image: dpage/pgadmin4:6.8
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5151:80"
+    volumes:
+      - pgadmin_data_swarm:/var/lib/pgadmin
+    networks:
+      - odoo-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  odoo:
+    image: odoo:18
+    command: >
+      bash -c "
+      echo 'Waiting for PostgreSQL...';
+      while ! PGPASSWORD=odoo123 psql -h db -U odoo -d postgres -c '\q'; do sleep 2; done;
+      echo 'Checking database existence...';
+      if ! PGPASSWORD=odoo123 psql -h db -U odoo -lqt | cut -d \| -f 1 | grep -qw odoo; then
+        echo 'Initializing database...';
+        odoo -d odoo -i base --stop-after-init;
+      fi;
+      echo 'Starting Odoo...';
+      exec odoo
+      "
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo123
+      DB_PORT: 5432
+      ODOO_RC: /etc/odoo/odoo.conf
+      UNACCENT: "True"
+    volumes:
+      - odoo_data_swarm:/var/lib/odoo
+      - ./odoo_config:/etc/odoo
+      - ./odoo_addons:/mnt/extra-addons
+    ports:
+      - "8167:8069"
+    networks:
+      - odoo-net
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        order: start-first
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+
+networks:
+  odoo-net:
+    driver: overlay
+    attachable: true
+    driver_opts:
+      encrypted: ""
+
+volumes:
+  pg_data_swarm:
+    driver: local
+  pgadmin_data_swarm:
+    driver: local
+  odoo_data_swarm:
+    driver: local
